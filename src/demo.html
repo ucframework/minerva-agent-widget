@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Minerva AI Agent Demo</title>
+  <!-- No stylesheet link needed: the widget loads minerva-ai-agent.css
+       into its own shadow root, fully isolated from the page CSS. -->
+</head>
+<body>
+  <h1>Minerva AI Agent Demo</h1>
+  <script>
+    // API base resolution: init({ apiUrl }) > build-time API_URL (.env.*) >
+    // window.MINERVA_API_URL > the default, https://uc-vortex.dev.ucframework.pt
+    //
+    // The real backend only allows CORS from http://localhost:8080, so serve
+    // this page from there (npx serve src -l 8080). From any other origin,
+    // go through the CORS proxy (node dev-server/proxy-server.js):
+    //   window.MINERVA_API_URL = "http://localhost:8789";
+  </script>
+  <script src="minerva-ai-agent.js"></script>
+  <script>
+    // Init options: primaryColor, apiUrl (optional override of the API
+    // base, absolute or same-origin path), domain ("sgrh" | "sga"),
+    // provider ("iaedu" | "ollama"), search ("dense" | "sparse" | "hybrid").
+    // Without domain, the widget asks the user on first open (picker
+    // built from /api/get_configs; the choice is remembered for 24h).
+    // Labels live in the widget code (pt/en); language is auto-detected
+    // from the browser.
+    window.minervaAgent.init({
+      primaryColor: "#000000",
+      // domain: "sgrh",
+      // provider: "iaedu",
+      // search: "dense",
+    });
+
+    // Switch language at runtime:
+    // window.minervaAgent.setLanguage("en");
+    // window.minervaAgent.setLanguage("pt");
+  </script>
+</body>
+</html>

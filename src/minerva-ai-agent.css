@@ -1,0 +1,818 @@
+/* Minerva AI Agent Widget Styles */
+
+:root {
+  --minerva-primary: #000000;
+  --minerva-primary-hover: #0000009c;
+  --minerva-bg: #ffffff;
+  --minerva-bg-alt: #f0f4f8;
+  --minerva-text: #0f172a;
+  --minerva-text-muted: #64748b;
+  --minerva-border: #e2e8f0;
+  --minerva-radius: 12px;
+  --minerva-shadow: 0 10px 30px rgba(15, 23, 42, 0.15);
+  --minerva-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.minerva-widget {
+  /* --minerva-primary / --minerva-primary-hover come from the shadow host
+     (set inline by _applyThemeVars). Re-declaring them here would override
+     the configured color, so they are intentionally omitted. */
+  --minerva-bg: #ffffff;
+  --minerva-bg-alt: #f0f4f8;
+  --minerva-text: #0f172a;
+  --minerva-text-muted: #64748b;
+  --minerva-border: #e2e8f0;
+  --minerva-radius: 12px;
+  --minerva-shadow: 0 10px 30px rgba(15, 23, 42, 0.15);
+  --minerva-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* FAB - Floating Action Button */
+.minerva-fab {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  height: 56px;
+  border-radius: 28px;
+  background: var(--minerva-primary);
+  color: #ffffff;
+  border: none;
+  cursor: pointer;
+  box-shadow: var(--minerva-shadow);
+  z-index: 2147483645;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: var(--minerva-font);
+  white-space: nowrap;
+  transition: transform 0.2s ease-in-out, border-radius 0.3s ease;
+}
+
+.minerva-fab:hover {
+  transform: scale(1.05);
+}
+
+.minerva-fab-icon-wrap {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.minerva-fab-icon {
+  width: 24px;
+  height: 24px;
+  transition: transform 0.3s ease-in-out;
+}
+
+/* Label width is driven by its typed content (typewriter effect in JS).
+   It is empty/zero-width until the FAB expands and characters arrive. */
+.minerva-fab-label {
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  transition: max-width 0.2s ease, padding 0.2s ease;
+}
+
+.minerva-fab-expanded {
+  border-radius: 28px;
+}
+
+.minerva-fab-expanded .minerva-fab-label {
+  max-width: 240px;
+  padding-right: 20px;
+}
+
+/* Blinking caret while the pill is expanded, to sell the writing effect. */
+.minerva-fab-expanded .minerva-fab-label::after {
+  content: "";
+  display: inline-block;
+  width: 1px;
+  height: 1em;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  background: currentColor;
+  animation: minerva-caret 0.8s step-end infinite;
+}
+
+@keyframes minerva-caret {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Chat Panel */
+.minerva-chat-panel {
+  position: fixed;
+  bottom: 100px;
+  right: 20px;
+  width: 420px;
+  height: 640px;
+  /* Shrink with the window: keep 100px below (FAB) and 20px above.
+     When even a cramped panel can't fit, the widget auto-minimizes
+     (see the resize handler in JS). */
+  max-height: calc(100vh - 120px);
+  max-height: calc(100dvh - 120px);
+  max-width: calc(100vw - 40px);
+  border-radius: var(--minerva-radius);
+  box-shadow: var(--minerva-shadow);
+  background: var(--minerva-bg);
+  z-index: 2147483644;
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--minerva-font);
+  transition: width 0.3s ease, height 0.3s ease, opacity 0.3s ease, transform 0.3s ease;
+  opacity: 0;
+  transform: scale(0.95) translateY(20px);
+  animation: minerva-panel-enter 0.3s ease forwards;
+}
+
+.minerva-chat-panel-expanded {
+  width: 600px;
+  height: 800px;
+}
+
+.minerva-chat-panel.exit-animation {
+  animation: minerva-panel-exit 0.3s ease forwards;
+}
+
+@keyframes minerva-panel-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes minerva-panel-exit {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.95) translateY(20px);
+  }
+}
+
+/* Root container */
+.minerva-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background: var(--minerva-bg);
+  border: 1px solid var(--minerva-border);
+  border-radius: var(--minerva-radius);
+  overflow: hidden;
+  font-size: 14px;
+  color: var(--minerva-text);
+}
+
+/* Header */
+.minerva-header {
+  padding: 14px 16px;
+  background: var(--minerva-bg);
+  color: var(--minerva-text);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--minerva-border);
+  position: relative;
+  overflow: visible;
+  z-index: 999;
+}
+
+.minerva-header-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  color: var(--minerva-primary);
+}
+
+.minerva-header-title {
+  font-size: 15px;
+  flex: 1;
+}
+
+.minerva-header-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  position: relative;
+  z-index: 999;
+}
+
+.minerva-header-control-btn {
+  background: transparent;
+  border: 0;
+  color: var(--minerva-text);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: calc(var(--minerva-radius) / 2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  transition: background-color 0.2s;
+  font-family: var(--minerva-font);
+  position: relative;
+}
+
+.minerva-header-control-btn:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.minerva-header-control-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Domain picker */
+.minerva-domain-picker {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 18px;
+  background: var(--minerva-bg);
+  color: var(--minerva-text);
+  min-height: 0;
+}
+
+.minerva-domain-title {
+  margin: 0 0 16px 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--minerva-text);
+}
+
+.minerva-domain-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.minerva-domain-btn {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 24px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--minerva-font);
+  background: var(--minerva-bg);
+  color: var(--minerva-text);
+  border: 1px solid var(--minerva-border);
+  text-align: left;
+  transition: border-color 0.2s, background-color 0.2s;
+}
+
+.minerva-domain-btn:hover,
+.minerva-domain-btn:focus-visible {
+  border-color: var(--minerva-primary);
+  background: var(--minerva-bg-alt);
+}
+
+.minerva-domain-error {
+  margin: 0 0 4px 0;
+  font-size: 13px;
+  color: var(--minerva-text-muted);
+}
+
+/* Consent gate */
+.minerva-consent {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 18px;
+  background: var(--minerva-bg);
+  color: var(--minerva-text);
+  min-height: 0;
+}
+
+.minerva-consent-intro {
+  margin: 0 0 16px 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--minerva-text);
+}
+
+.minerva-consent-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.minerva-consent-list li {
+  position: relative;
+  padding-left: 18px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--minerva-text-muted);
+}
+
+.minerva-consent-list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--minerva-text-muted);
+}
+
+.minerva-consent-actions {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--minerva-border);
+  background: var(--minerva-bg);
+  flex-shrink: 0;
+}
+
+.minerva-consent-btn {
+  flex: 1;
+  padding: 12px 16px;
+  border-radius: 24px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--minerva-font);
+  transition: opacity 0.2s, background-color 0.2s;
+}
+
+.minerva-consent-cancel {
+  background: var(--minerva-bg);
+  color: var(--minerva-text);
+  border: 1px solid var(--minerva-border);
+}
+
+.minerva-consent-cancel:hover {
+  background: var(--minerva-bg-alt);
+}
+
+.minerva-consent-agree {
+  background: var(--minerva-primary);
+  color: #ffffff;
+  border: 1px solid var(--minerva-primary);
+}
+
+.minerva-consent-agree:hover {
+  opacity: 0.9;
+}
+
+/* Messages area */
+.minerva-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--minerva-bg);
+  color: var(--minerva-text);
+  min-height: 0;
+}
+
+.minerva-msg {
+  display: flex;
+  flex-direction: column;
+  max-width: 85%;
+  min-width: 0;
+}
+
+.minerva-msg.minerva-user {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.minerva-msg.minerva-bot {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+
+.minerva-msg-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.minerva-msg-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px;
+  font-size: 12px;
+}
+
+.minerva-msg-footer-sent {
+  flex-direction: row;
+  justify-content: flex-end;
+}
+
+.minerva-msg-footer-received {
+  flex-direction: row;
+  justify-content: flex-start;
+}
+
+.minerva-msg-time {
+  color: var(--minerva-text-muted);
+  font-size: 12px;
+}
+
+.minerva-copy-btn {
+  background: transparent;
+  border: none;
+  color: var(--minerva-text-muted);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: color 0.2s ease;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.minerva-copy-btn:hover {
+  cursor: pointer;
+}
+
+.minerva-copy-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.minerva-copy-btn.minerva-copy-success {
+  color: #10b981;
+}
+
+/* Message bubbles */
+.minerva-bubble {
+  max-width: 100%;
+  padding: 10px 14px;
+  border-radius: var(--minerva-radius);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.5;
+}
+
+.minerva-msg.minerva-user .minerva-bubble {
+  background: var(--minerva-primary);
+  color: #ffffff;
+  border-bottom-right-radius: 4px;
+}
+
+.minerva-msg.minerva-bot .minerva-bubble {
+  background: var(--minerva-bg-alt);
+  color: var(--minerva-text);
+  border-bottom-left-radius: 4px;
+}
+
+.minerva-bubble[data-streaming="true"] {
+  animation: minerva-stream-pulse 0.3s ease-in-out;
+}
+
+@keyframes minerva-stream-pulse {
+  0% {
+    opacity: 0.9;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.minerva-bubble p {
+  margin: 0 0 8px 0;
+}
+
+.minerva-bubble p:last-child {
+  margin-bottom: 0;
+}
+
+.minerva-bubble ul,
+.minerva-bubble ol {
+  margin: 4px 0 8px 0;
+  padding-left: 20px;
+}
+
+.minerva-bubble code {
+  background: rgba(15, 23, 42, 0.08);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+}
+
+.minerva-msg.minerva-user .minerva-bubble code {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.minerva-bubble pre {
+  background: rgba(15, 23, 42, 0.08);
+  padding: 10px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 6px 0;
+}
+
+.minerva-bubble pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.minerva-bubble a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+/* Sources */
+.minerva-sources {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--minerva-text-muted);
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Only the summary toggle is interactive; the list entries are plain
+   text unless they carry a real URL (rendered as a link). */
+.minerva-sources summary {
+  user-select: none;
+  padding: 4px 0;
+  color: var(--minerva-text-muted);
+  cursor: pointer;
+}
+
+.minerva-src-link {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.minerva-src-link:hover {
+  color: var(--minerva-primary);
+}
+
+/* The expanded list grows to its full height — no internal cap or
+   nested scrollbar; the messages area provides the scrolling. */
+.minerva-sources-list {
+  margin: 6px 0 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.minerva-sources-list li {
+  padding: 6px 8px;
+  background: var(--minerva-bg);
+  border: 1px solid var(--minerva-border);
+  border-radius: calc(var(--minerva-radius) / 2);
+  font-size: 12px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.minerva-sources-list .minerva-src-name {
+  font-weight: 600;
+  color: var(--minerva-text);
+}
+
+/* Typing indicator */
+.minerva-typing {
+  display: inline-flex;
+  gap: 4px;
+  padding: 10px 14px;
+}
+
+.minerva-typing span {
+  width: 6px;
+  height: 6px;
+  background: var(--minerva-text-muted);
+  border-radius: 50%;
+  animation: minerva-bounce 1.2s infinite ease-in-out;
+}
+
+.minerva-typing span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.minerva-typing span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes minerva-bounce {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.minerva-typing-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.minerva-stop-btn {
+  border: 1px solid var(--minerva-border);
+  background: var(--minerva-bg);
+  color: var(--minerva-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 14px;
+  cursor: pointer;
+  font-family: var(--minerva-font);
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.minerva-stop-btn:hover {
+  background: var(--minerva-bg-alt);
+  color: var(--minerva-text);
+}
+
+.minerva-typing-status {
+  font-size: 12px;
+  color: var(--minerva-text-muted);
+  margin-top: 4px;
+  padding-left: 4px;
+  min-height: 15px;
+}
+
+/* Neutral system notice (e.g. "response stopped") */
+.minerva-notice {
+  align-self: center;
+  color: var(--minerva-text-muted);
+  background: var(--minerva-bg-alt);
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+/* Error message */
+.minerva-error {
+  align-self: center;
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+/* Composer */
+.minerva-composer {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  background: var(--minerva-bg);
+  flex-shrink: 0;
+}
+
+.minerva-input-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  border: 1px solid var(--minerva-border);
+  border-radius: 22px;
+  padding: 6px 10px;
+  background: var(--minerva-bg);
+}
+
+.minerva-composer textarea {
+  flex: 1;
+  resize: none;
+  border: 0;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--minerva-text);
+  background: transparent;
+  outline: none;
+  /* Wraps and grows vertically; JS caps it at 3 lines then scrolls.
+     line-height 1.4 * 14px = 19.6px per line; + 16px vertical padding. */
+  padding: 8px;
+  line-height: 1.4;
+  height: 36px;
+  box-sizing: border-box;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.minerva-composer textarea::-webkit-scrollbar {
+  display: none;
+}
+
+.minerva-composer textarea:focus {
+  outline: none;
+}
+
+.minerva-input-wrapper:focus-within {
+  border-color: var(--minerva-primary);
+}
+
+/* Send button — matches the one-line textarea height (36px) so the icon
+   stays vertically centered with the text. With the wrapper aligned to
+   flex-end, it stays pinned to the last line as the textarea grows. */
+.minerva-send-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: transparent;
+  color: var(--minerva-primary);
+  border: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  transition: opacity 0.2s;
+  font-family: var(--minerva-font);
+}
+
+.minerva-send-btn svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+  color: currentColor;
+}
+
+.minerva-send-btn:hover:not(:disabled) {
+  opacity: 0.7;
+}
+
+.minerva-send-btn:disabled {
+  color: var(--minerva-text-muted);
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Responsive */
+@media (max-width: 520px) {
+  .minerva-chat-panel {
+    width: 100vw;
+    /* dvh tracks the visible viewport as mobile browser chrome (URL bar)
+       and the on-screen keyboard come and go; vh is the fallback. */
+    height: 100vh;
+    height: 100dvh;
+    /* Full-screen on mobile — undo the desktop shrink-to-fit caps. */
+    max-height: none;
+    max-width: none;
+    bottom: 0;
+    right: 0;
+    border-radius: 0;
+  }
+
+  .minerva-root {
+    border: 0;
+    border-radius: 0;
+  }
+
+  /* The panel is always full-screen on mobile — expand is meaningless. */
+  .minerva-header-control-btn[aria-label="Expand"],
+  .minerva-header-control-btn[aria-label="Collapse"] {
+    display: none;
+  }
+
+  /* Hide the FAB while the chat is open so it doesn't sit on top of the
+     composer; the header's minimize button closes the panel. */
+  .minerva-widget.minerva-open .minerva-fab {
+    display: none;
+  }
+
+  /* iOS Safari zooms into inputs with font-size < 16px on focus. */
+  .minerva-composer textarea {
+    font-size: 16px;
+  }
+}
