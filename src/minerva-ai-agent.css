@@ -548,6 +548,28 @@
   text-decoration: underline;
 }
 
+/* Inline [N] citation chip — a clickable reference to a Sources entry. */
+.minerva-cite {
+  color: var(--minerva-primary);
+  font-weight: 600;
+  font-size: 0.82em;
+  cursor: pointer;
+  text-decoration: none;
+  padding: 0 1px;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+
+.minerva-cite:hover {
+  text-decoration: underline;
+}
+
+.minerva-cite:focus-visible {
+  outline: 2px solid var(--minerva-primary);
+  outline-offset: 1px;
+  border-radius: 3px;
+}
+
 /* Sources */
 .minerva-sources {
   margin-top: 8px;
@@ -602,6 +624,30 @@
 .minerva-sources-list .minerva-src-name {
   font-weight: 600;
   color: var(--minerva-text);
+}
+
+/* Secondary context line: document section, or spreadsheet sheet name. */
+.minerva-sources-list .minerva-src-meta {
+  margin-top: 2px;
+  color: var(--minerva-text-muted);
+  font-size: 11px;
+}
+
+/* Brief flash when an inline [N] citation jumps to its source entry. */
+.minerva-sources-list li.minerva-src-highlight {
+  animation: minerva-src-flash 1.6s ease;
+}
+
+@keyframes minerva-src-flash {
+  0%,
+  30% {
+    background: var(--minerva-bg-alt);
+    border-color: var(--minerva-primary);
+  }
+  100% {
+    background: var(--minerva-bg);
+    border-color: var(--minerva-border);
+  }
 }
 
 /* Typing indicator */
@@ -678,6 +724,16 @@
   padding: 6px 12px;
   border-radius: 8px;
   font-size: 12px;
+}
+
+/* Service-unavailable state: centered message stacked over a retry button. */
+.minerva-notice.minerva-unavailable {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  max-width: 85%;
 }
 
 /* Error message */

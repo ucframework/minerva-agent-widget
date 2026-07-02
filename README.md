@@ -116,10 +116,26 @@ window.minervaAgent.destroy();
   reload or a closed tab restores the conversation (rendered instantly,
   without the typing animation). The header's **reset** button wipes the
   stored conversation, starts a fresh backend thread right away, and shows
-  its new welcome message.
-- **Expired threads** — if the backend no longer knows the stored thread
-  (HTTP 404), the widget silently creates a new thread and resends the
-  message once.
+  its new welcome message. Server-side the conversation is durable: the
+  backend keeps only a short-lived in-memory session (see
+  `session_ttl_hours` in the `/api/chat/new` response) but transparently
+  rehydrates it from the database, so a stored `thread_id` stays usable for
+  as long as the conversation exists there.
+- **Sources & inline citations** — answers cite their sources inline as
+  `[N]`, where `N` is the `rank` of an entry in `retrieved_docs`. Each `[N]`
+  renders as a clickable chip that opens the message's **Sources** list and
+  highlights the matching entry. Web sources (which carry a `url`) are
+  links; document sources (pdf/docx/xlsx) show the file name plus its
+  section or sheet as plain text.
+- **Expired threads** — if the backend reports the stored thread is gone
+  (HTTP 404 with `code: "thread_not_found"`), the widget silently creates a
+  new thread and resends the message once. Other 404s surface as an error
+  instead of silently starting a new conversation.
+- **Service availability** — before opening a fresh conversation the widget
+  probes `GET /health`; if the backend is unreachable (service down / off
+  VPN) it shows a "temporarily unavailable" message with a retry button
+  instead of hanging. A missing or erroring `/health` endpoint is treated
+  as reachable, so it never blocks a healthy backend.
 - **Answer latency** — real answers take 45–90 s (retrieval + LLM). While
   waiting, the typing indicator rotates progress hints ("A pesquisar
   documentos…", …) and shows a **stop** button that aborts the request
@@ -172,8 +188,33 @@ node dev-server/proxy-server.js         # http://localhost:8789
 | Endpoint | Method | Body | Returns |
 | --- | --- | --- | --- |
 | `/api/get_configs` | GET | — | domains, providers, search modes |
-| `/api/chat/new` | POST | `{ domain, provider, search }` | `{ thread_id, welcome_message }` |
+| `/api/chat/new` | POST | `{ domain, provider, search }` | `{ thread_id, welcome_message, session_ttl_hours }` |
 | `/api/chat/message` | POST | `{ thread_id, message }` | `{ thread_id, answer, retrieved_docs, ... }` |
+| `/health` | GET | — | `{ status: "ok" }` (liveness probe) |
+
+`retrieved_docs` is a JSON array of source objects:
+
+```json
+{
+  "rank": 1,
+  "filename": "rauc_30-07-2025_com_indice_PT.pdf",
+  "section": "Artigo 273.º - Avaliação da qualidade",
+  "sheet_name": "",
+  "chunk_id": "ca517914-…::chunk534",
+  "filetype": "pdf",
+  "alfresco_id": "ca517914-…",
+  "url": null
+}
+```
+
+The display name arrives as `filename` on the live backend (the API doc
+calls it `source`; the widget accepts either), `section`/`sheet_name` are the
+in-document location, and `url` is populated only for web results. Metadata is
+uneven — a chunk may arrive with no file name and/or no section — so the widget
+falls back file name → section → a filetype-based generic when labelling an
+entry. The answer text references entries by `rank` as inline `[N]` citations.
+A 404 for an unknown session is tagged
+`{ "detail": "…", "code": "thread_not_found" }`.
 
 The widget uses `domain: "sgrh"`, `provider: "iaedu"`, `search: "dense"`
 (hardcoded in `_mergeConfig`).

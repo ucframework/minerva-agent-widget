@@ -105,6 +105,10 @@ class MinervaAIAgent {
         networkError:
           "Não foi possível contactar o serviço. Verifique a sua ligação à internet (e a VPN da UC, se aplicável) e tente novamente.",
         genericError: "Ocorreu um erro. Por favor, tente novamente.",
+        serviceUnavailable:
+          "O serviço está temporariamente indisponível. Tente novamente dentro de momentos.",
+        sourcesLabel: "Fontes",
+        citationLabel: "Ver fonte",
       },
       en: {
         header: "Minerva",
@@ -125,6 +129,10 @@ class MinervaAIAgent {
         networkError:
           "Could not reach the service. Check your internet connection (and the UC VPN, if applicable) and try again.",
         genericError: "An error occurred. Please try again.",
+        serviceUnavailable:
+          "The service is temporarily unavailable. Please try again in a moment.",
+        sourcesLabel: "Sources",
+        citationLabel: "View source",
       },
     };
   }
@@ -446,12 +454,14 @@ class MinervaAIAgent {
       } catch {}
       if (!res.ok) {
         // Mock errors look like { error: { message } }, the real backend
-        // (DRF) uses { detail }.
+        // (DRF) uses { detail }, plus a stable machine-readable `code`
+        // (e.g. "thread_not_found") we key retry logic off of.
         const detail = data?.error?.message || data?.detail || "";
         const err = new Error(
           `${res.status} ${res.statusText}${detail ? " — " + detail : ""}`,
         );
         err.status = res.status;
+        err.code = data?.code || data?.error?.code || null;
         throw err;
       }
       if (data === null) {
@@ -471,6 +481,12 @@ class MinervaAIAgent {
           { thread_id: threadId, message },
           signal,
         ),
+      // Lightweight liveness probe (GET /health → {"status":"ok"}). Resolves
+      // for any HTTP response (the server answered) and rejects only when the
+      // network/VPN layer fails, so the caller can tell "unreachable" apart
+      // from "reachable but returned an error / missing endpoint".
+      health: ({ signal } = {}) =>
+        fetch(apiBase + "/health", { method: "GET", signal }),
     };
   }
 
@@ -989,6 +1005,16 @@ class MinervaAIAgent {
     const textareaEl = this.chatPanel.querySelector("textarea");
     const submitBtn = this.chatPanel.querySelector(".minerva-send-btn");
 
+    // Inline [N] citations are delegated on the (persistent) messages
+    // container so the handler survives each bubble's innerHTML rewrites
+    // during streaming, and covers every message with a single listener.
+    messagesEl.addEventListener("click", (e) => this._onCitationActivate(e));
+    messagesEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") {
+        this._onCitationActivate(e);
+      }
+    });
+
     // Restore the conversation persisted on this device (24h TTL).
     const state = this._loadState();
     this._threadId = state?.threadId || null;
@@ -1059,14 +1085,27 @@ class MinervaAIAgent {
   /**
    * Create a backend thread and greet with its welcome_message (when the
    * backend returns one — the mock does not). Used on first open of a
-   * fresh conversation and after a reset. The in-flight promise is kept
-   * on the instance so a message sent before it resolves awaits it
-   * instead of opening a second thread. Failures are swallowed — the
+   * fresh conversation and after a reset. Preflights /health first and, if
+   * the backend is unreachable, shows a retryable "service unavailable"
+   * state instead of proceeding. The in-flight thread promise is kept on
+   * the instance so a message sent before it resolves awaits it instead of
+   * opening a second thread. Thread-creation failures are swallowed — the
    * thread is then created lazily on the first send.
    * @private
    */
   async _startNewThread(messagesEl) {
     const typingEl = this._addTypingIndicator(messagesEl);
+
+    // Fail fast when the backend is unreachable (service down / off VPN)
+    // instead of hanging on the thread-creation request. A missing or
+    // erroring /health endpoint still counts as reachable — see
+    // _isServiceReachable — so this never blocks a healthy backend.
+    if (!(await this._isServiceReachable())) {
+      typingEl.remove();
+      this._addServiceUnavailable(messagesEl);
+      return;
+    }
+
     this._threadPromise = this.transport.newThread({
       domain: this.config.domain,
       provider: this.config.provider,
@@ -1184,11 +1223,14 @@ class MinervaAIAgent {
         });
         this._saveState();
       } catch (err) {
-        // A 404 from /api/chat/message means the thread expired or is
-        // unknown server-side (real backend: "Sessao nao encontrada",
-        // mock: thread_not_found) — drop it and retry once on a fresh
-        // thread.
-        if (err.status === 404 && !isRetry) {
+        // The backend tags a genuinely-gone session with a stable
+        // code === "thread_not_found" on its 404. In that case the thread
+        // is dropped from the DB (the server rehydrates live sessions from
+        // the DB automatically, so an in-memory expiry never surfaces here)
+        // — recreate a fresh thread and resend once. A 404 without that
+        // code is generic routing and must surface as an error rather than
+        // silently spin up a new conversation.
+        if (err.status === 404 && err.code === "thread_not_found" && !isRetry) {
           this._threadId = null;
           this._saveState();
           typingEl.remove();
@@ -1302,6 +1344,14 @@ class MinervaAIAgent {
     const copyBtn = footerEl.querySelector(".minerva-copy-btn");
     this._setupTooltip(copyBtn);
 
+    // Ranks the answer may cite inline as [N]; only these become clickable
+    // references (an [N] with no matching source stays plain text).
+    const citable = new Set(
+      (sources || [])
+        .map((s) => Number(s.rank ?? s.index))
+        .filter((n) => Number.isFinite(n)),
+    );
+
     const sourcesContainer = document.createElement("div");
     sourcesContainer.style.opacity = "0";
     sourcesContainer.style.transition = "opacity 0.3s ease";
@@ -1310,26 +1360,9 @@ class MinervaAIAgent {
       sourcesContainer.className = "minerva-sources";
       sourcesContainer.innerHTML = `
         <details>
-          <summary>Sources (${sources.length})</summary>
+          <summary>${this._escape(this._label("sourcesLabel"))} (${sources.length})</summary>
           <ul class="minerva-sources-list">
-            ${sources
-              .map((s) => {
-                const name = `[${s.index}] ${this._escape(s.filename)}`;
-                // Only references that carry a real URL become links;
-                // the rest are plain text (no pointer cursor, nothing
-                // pretending to be clickable).
-                const url = this._sourceUrl(s);
-                const nameHtml = url
-                  ? `<a class="minerva-src-link" href="${this._escape(url)}" target="_blank" rel="noopener noreferrer">${name}</a>`
-                  : name;
-                return `
-              <li>
-                <div class="minerva-src-name">${nameHtml}</div>
-                ${s.source && !url ? `<div>${this._escape(s.source)}</div>` : ""}
-              </li>
-            `;
-              })
-              .join("")}
+            ${sources.map((s) => this._renderSourceItem(s)).join("")}
           </ul>
         </details>
       `;
@@ -1354,11 +1387,11 @@ class MinervaAIAgent {
     };
 
     if (instant) {
-      bubbleEl.innerHTML = this._renderMarkdown(text);
+      bubbleEl.innerHTML = this._renderMarkdown(text, citable);
       bubbleEl.removeAttribute("data-streaming");
       reveal();
     } else {
-      this._streamText(bubbleEl, text, reveal);
+      this._streamText(bubbleEl, text, reveal, citable);
     }
   }
 
@@ -1433,6 +1466,56 @@ class MinervaAIAgent {
     el.className = "minerva-error";
     el.textContent = text;
     messagesEl.appendChild(el);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  /**
+   * Quick liveness preflight via GET /health. Returns true when the server
+   * answers at all — including a 404 (endpoint not deployed) or any other
+   * HTTP status — and false only when the network/VPN layer fails or the
+   * probe times out. That asymmetry is deliberate: a wrong/missing path
+   * must never produce a false "service unavailable", but a genuinely
+   * unreachable or hung backend should fail fast (bounded by the timeout).
+   * @private
+   */
+  async _isServiceReachable() {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6000);
+    try {
+      await this.transport.health({ signal: controller.signal });
+      return true;
+    } catch {
+      // TypeError (network/CORS/DNS) or AbortError (timeout) → unreachable.
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Show a friendly "service unavailable" state with a retry button that
+   * re-runs thread creation (which re-probes /health first).
+   * @private
+   */
+  _addServiceUnavailable(messagesEl) {
+    const wrap = document.createElement("div");
+    wrap.className = "minerva-notice minerva-unavailable";
+
+    const msg = document.createElement("div");
+    msg.textContent = this._label("serviceUnavailable");
+    wrap.appendChild(msg);
+
+    const retryBtn = document.createElement("button");
+    retryBtn.type = "button";
+    retryBtn.className = "minerva-stop-btn";
+    retryBtn.textContent = this._label("retry");
+    retryBtn.addEventListener("click", () => {
+      wrap.remove();
+      this._startNewThread(messagesEl);
+    });
+    wrap.appendChild(retryBtn);
+
+    messagesEl.appendChild(wrap);
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
 
@@ -1590,6 +1673,34 @@ class MinervaAIAgent {
   }
 
   /**
+   * Handle activation (click / Enter / Space) of an inline [N] citation:
+   * open that message's Sources list, scroll the cited entry into view and
+   * flash it. Scoped to the citation's own message, so [N] always resolves
+   * against the sources of the answer it appears in.
+   * @private
+   */
+  _onCitationActivate(e) {
+    const cite = e.target?.closest?.(".minerva-cite");
+    if (!cite) return;
+    e.preventDefault();
+    const rank = cite.getAttribute("data-rank");
+    const msg = cite.closest(".minerva-msg");
+    if (!msg || !rank) return;
+
+    const details = msg.querySelector(".minerva-sources details");
+    if (details) details.open = true;
+
+    const li = msg.querySelector(
+      `.minerva-sources-list li[data-rank="${rank}"]`,
+    );
+    if (!li) return;
+    li.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    li.classList.remove("minerva-src-highlight");
+    void li.offsetWidth; // restart the flash if the same citation is re-clicked
+    li.classList.add("minerva-src-highlight");
+  }
+
+  /**
    * Setup copy button functionality
    * @private
    */
@@ -1628,10 +1739,13 @@ class MinervaAIAgent {
   }
 
   /**
-   * Render markdown to HTML
+   * Render markdown to HTML. `citable`, when given, is a Set of source
+   * ranks the answer may reference inline as [N]; each such [N] becomes a
+   * clickable citation chip (see _onCitationActivate). [N] tokens whose N
+   * isn't a known rank are left as literal text.
    * @private
    */
-  _renderMarkdown(src) {
+  _renderMarkdown(src, citable) {
     if (!src) return "";
     const lines = src.replace(/\r\n/g, "\n").split("\n");
     const html = [];
@@ -1651,6 +1765,18 @@ class MinervaAIAgent {
         (_, label, href) =>
           `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`,
       );
+      // Inline citations [N] → clickable chips. Runs after the markdown
+      // link rule (so [label](url) is already consumed) and only when the
+      // rank matches a retrieved source. Codes are placeholders at this
+      // point, so [N] inside `code spans` is safely left alone.
+      if (citable && citable.size) {
+        out = out.replace(/\[(\d+)\](?!\()/g, (m, n) => {
+          const rank = Number(n);
+          if (!citable.has(rank)) return m;
+          const title = this._escape(`${this._label("citationLabel")} ${rank}`);
+          return `<a class="minerva-cite" data-rank="${rank}" role="button" tabindex="0" title="${title}">[${rank}]</a>`;
+        });
+      }
       out = out.replace(/ CODE(\d+) /g, (_, i) => `<code>${codes[+i]}</code>`);
       return out;
     };
@@ -1727,11 +1853,14 @@ class MinervaAIAgent {
   }
 
   /**
-   * Stream text with word-by-word animation
+   * Stream text with word-by-word animation. `citable` is forwarded to
+   * _renderMarkdown so inline [N] citations survive into the final HTML
+   * (during streaming, chunk reconstruction drops element attributes — as
+   * it already does for links — but the final assignment restores them).
    * @private
    */
-  _streamText(element, fullText, onComplete) {
-    const html = this._renderMarkdown(fullText);
+  _streamText(element, fullText, onComplete, citable) {
+    const html = this._renderMarkdown(fullText, citable);
     const tempDiv = document.createElement("div");
     tempDiv.innerHTML = html;
 
@@ -1789,45 +1918,150 @@ class MinervaAIAgent {
   }
 
   /**
-   * The URL of a parsed source, if it has one. Accepts a dedicated url
-   * field (the structured retrieved_docs we asked the backend for) or a
-   * source field that is itself an http(s) URL. Anything else — including
-   * today's plain-text sources — yields null, and the entry renders as
-   * plain text instead of a link.
+   * The URL of a parsed source, if it has one. Only the structured `url`
+   * field (populated for web results) makes a source clickable; document
+   * results (pdf/docx/xlsx) carry an alfresco_id but no browsable URL, so
+   * they render as plain text.
    * @private
    */
   _sourceUrl(s) {
-    const candidate = s.url || s.source || "";
-    return /^https?:\/\//i.test(candidate) ? candidate : null;
+    return typeof s.url === "string" && /^https?:\/\//i.test(s.url)
+      ? s.url
+      : null;
   }
 
   /**
-   * Parse retrieved docs from API response
+   * Render a single "Sources" list entry (an <li>) from a parsed source.
+   * The [rank] prefix is the anchor inline [N] citations jump to, so the
+   * <li> is tagged with data-rank. Web results (with a url) are links;
+   * everything else is plain text.
+   *
+   * Backend metadata is uneven — a chunk can arrive with no file name and
+   * no section. To never render a useless bare "[N]", the primary label
+   * falls back file name → section → a filetype-based generic; the section
+   * only takes the secondary line when it isn't already the primary.
+   * @private
+   */
+  _renderSourceItem(s) {
+    const rank = s.rank ?? s.index;
+    const file = s.source || s.filename || "";
+    const context = s.section || s.sheet_name || "";
+    const primary = file || context || this._filetypeLabel(s.filetype);
+    const secondary = primary === context ? "" : context;
+
+    const label = `[${this._escape(String(rank))}] ${this._escape(primary)}`;
+    const url = this._sourceUrl(s);
+    const nameHtml = url
+      ? `<a class="minerva-src-link" href="${this._escape(url)}" target="_blank" rel="noopener noreferrer">${label}</a>`
+      : label;
+    const metaHtml = secondary
+      ? `<div class="minerva-src-meta">${this._escape(secondary)}</div>`
+      : "";
+    return `
+      <li data-rank="${this._escape(String(rank))}">
+        <div class="minerva-src-name">${nameHtml}</div>
+        ${metaHtml}
+      </li>
+    `;
+  }
+
+  /**
+   * Human-readable generic for a source with no file name or section,
+   * derived from its filetype so the entry still says something.
+   * @private
+   */
+  _filetypeLabel(filetype) {
+    const ft = String(filetype || "").toLowerCase();
+    const names = {
+      pt: {
+        pdf: "Documento PDF",
+        docx: "Documento Word",
+        xlsx: "Folha de cálculo",
+        web: "Página web",
+        "": "Documento",
+      },
+      en: {
+        pdf: "PDF document",
+        docx: "Word document",
+        xlsx: "Spreadsheet",
+        web: "Web page",
+        "": "Document",
+      },
+    };
+    const table = names[this.lang] || names.pt;
+    return table[ft] || table[""];
+  }
+
+  /**
+   * Normalize the response's retrieved_docs into a sorted array of source
+   * objects. The backend returns a structured JSON array, e.g.:
+   *
+   *   { rank, filename, section, sheet_name, filetype, alfresco_id, url }
+   *
+   * The display name arrives as `filename` on the live backend (the API
+   * doc calls it `source`); we accept either. `section`/`sheet_name` are
+   * the in-document location, `url` is set only for web results, and
+   * `rank` is the anchor the inline [N] citations point at. If we still
+   * receive the old text blob (a string), fall back to the legacy line
+   * parser so sources don't silently disappear against an un-migrated
+   * backend.
    * @private
    */
   _parseRetrievedDocs(raw) {
-    if (!raw || typeof raw !== "string") return [];
-    const out = [];
-    const lines = raw.split("\n");
-    let current = null;
+    if (!raw) return [];
 
-    for (const line of lines) {
+    let arr = raw;
+    if (typeof raw === "string") {
+      const trimmed = raw.trim();
+      if (!trimmed) return [];
+      try {
+        arr = JSON.parse(trimmed);
+      } catch {
+        return this._parseLegacyRetrievedDocs(raw);
+      }
+    }
+    if (!Array.isArray(arr)) return [];
+
+    const str = (v) => (typeof v === "string" ? v : "");
+    return arr
+      .map((d) => ({
+        rank: Number(d?.rank),
+        // Live backend: `filename`. API doc: `source`. First non-empty wins.
+        source: str(d?.source) || str(d?.filename),
+        section: str(d?.section),
+        sheet_name: str(d?.sheet_name),
+        filetype: str(d?.filetype),
+        alfresco_id: d?.alfresco_id ?? null,
+        url: typeof d?.url === "string" ? d.url : null,
+      }))
+      .filter((d) => Number.isFinite(d.rank))
+      .sort((a, b) => a.rank - b.rank);
+  }
+
+  /**
+   * Legacy parser for the pre-2026-06 text-blob retrieved_docs format,
+   * mapped onto the current source shape (rank/source). Kept as a fallback
+   * so an un-migrated backend still renders a (link-less) sources list.
+   * @private
+   */
+  _parseLegacyRetrievedDocs(raw) {
+    if (typeof raw !== "string") return [];
+    const out = [];
+    let current = null;
+    for (const line of raw.split("\n")) {
       const header = line.match(/^\[(\d+)\]\s+(.+)$/);
       if (header) {
         if (current) out.push(current);
         current = {
-          index: +header[1],
-          filename: header[2].trim(),
-          chunk_id: "",
-          source: "",
+          rank: +header[1],
+          source: header[2].trim(),
+          section: "",
+          sheet_name: "",
+          filetype: "",
+          alfresco_id: null,
+          url: null,
         };
         continue;
-      }
-      if (current) {
-        const chunk = line.match(/chunk_id=([^\s|]+)/);
-        const source = line.match(/source=(.+?)(?:\s*\||\s*$)/);
-        if (chunk) current.chunk_id = chunk[1];
-        if (source) current.source = source[1].trim();
       }
     }
     if (current) out.push(current);

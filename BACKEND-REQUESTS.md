@@ -3,6 +3,12 @@
 **Data:** 2026-06-12
 **Backend em causa:** `https://uc-vortex.dev.ucframework.pt`
 
+> ✅ **Resolvido (2026-06-16):** todos os cinco pontos abaixo foram entregues
+> pela equipa de backend e o widget já os consome — `retrieved_docs`
+> estruturado, citações inline `[N]`, `code: "thread_not_found"` no 404,
+> `session_ttl_hours` (com reidratação a partir da BD) e `GET /health`.
+> Este documento é mantido como histórico do pedido original.
+
 Contexto: o widget de chat (frontend) já está ligado ao backend real e funcional
 de ponta a ponta. Durante a integração identificámos os pontos abaixo.
 
